@@ -3,3 +3,6 @@ scrap.py
 scraping.py
 stiri.csv
 stiri_vizualizari.csv
+results/checkpoint-*/optimizer.pt
+results/checkpoint-*
+results/

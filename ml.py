@@ -3,40 +3,53 @@ from transformers import BertTokenizer, BertForSequenceClassification, Trainer, 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import torch
+import re
+import os
 
-# Setam device-ul la GPU daca este disponibil, altfel folosim CPU
+# Set the device
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-# Incarcam seturile de date din iCloud Drive
+# Define model save path
+model_dir = './saved_model'
+
+# Load datasets
 true_news = pd.read_csv('/Users/nasteapopova/Desktop/AI-in-actiune/True.csv')
 fake_news = pd.read_csv('/Users/nasteapopova/Desktop/AI-in-actiune/Fake.csv')
 
-# Adaugam etichete
+# Add labels
 true_news['label'] = 1
 fake_news['label'] = 0
 
-# Combinam seturile de date
+# Combine datasets
 news_dataset = pd.concat([true_news, fake_news], ignore_index=True)
 
-# Preprocesam setul de date pentru a pastra doar 'text' si 'label'
+# Preprocess the dataset
 news_dataset = news_dataset[['text', 'label']]
+news_dataset = news_dataset.sample(frac=0.2, random_state=42)  # Use 20% of the dataset
 
-# Luam doar jumatate din setul de date
-news_dataset = news_dataset.sample(frac=0.5, random_state=42)  # 50% din date
-
-# Impartim setul de date in seturi de antrenament si validare
+# Split the dataset
 train_texts, val_texts, train_labels, val_labels = train_test_split(
     news_dataset['text'].tolist(), news_dataset['label'].tolist(), test_size=0.2, random_state=42
 )
 
-# Incarcam tokenizer-ul BERT
+# Load the tokenizer
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
-# Tokenizam textele
-train_encodings = tokenizer(train_texts, truncation=True, padding=True, max_length=512)
-val_encodings = tokenizer(val_texts, truncation=True, padding=True, max_length=512)
+# Clean text function
+def clean_text(text):
+    text = re.sub(r'\s+', ' ', text)  # Remove extra whitespace
+    text = text.strip()  # Remove leading/trailing spaces
+    return text
 
-# Cream o clasa personalizata pentru dataset
+# Clean the training and validation texts
+train_texts = [clean_text(text) for text in train_texts]
+val_texts = [clean_text(text) for text in val_texts]
+
+# Tokenize the texts
+train_encodings = tokenizer(train_texts, truncation=True, padding=True, max_length=128)
+val_encodings = tokenizer(val_texts, truncation=True, padding=True, max_length=128)
+
+# Create a custom dataset class
 class NewsDataset(torch.utils.data.Dataset):
     def __init__(self, encodings, labels):
         self.encodings = encodings
@@ -50,57 +63,79 @@ class NewsDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.labels)
 
-# Pregatim seturile de date
+# Prepare datasets
 train_dataset = NewsDataset(train_encodings, train_labels)
 val_dataset = NewsDataset(val_encodings, val_labels)
 
-# Incarcam modelul BERT si il mutam pe device-ul corespunzator
-model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=2)
-model.to(device)
+# Load the model and move to the device if already trained
+if os.path.exists(model_dir):
+    print("Modelul antrenat a fost gasit. Se incarca modelul salvat...")
+    model = BertForSequenceClassification.from_pretrained(model_dir)
+else:
+    print("Modelul antrenat nu a fost gasit. Incepem antrenarea...")
+    model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=2)
+    model.to(device)
 
-# Setam argumentele pentru antrenament
-training_args = TrainingArguments(
-    output_dir='./results',  # Directorul pentru salvarea modelelor
-    num_train_epochs=3,  # Numarul de epoci
-    per_device_train_batch_size=4,  # Batch size pentru antrenament
-    per_device_eval_batch_size=8,  # Batch size pentru evaluare
-    warmup_steps=500,  # Numarul de pasi pentru warmup
-    weight_decay=0.01,  # Valoarea pentru weight decay
-    logging_dir='./logs',  # Directorul pentru loguri
-    evaluation_strategy="epoch",  # Evaluam dupa fiecare epoca
-    save_strategy="epoch",  # Salvam modelul dupa fiecare epoca
-    load_best_model_at_end=True,  # Incarcam cel mai bun model la finalul antrenamentului
-)
+    # Set training arguments
+    training_args = TrainingArguments(
+        output_dir='./results',
+        num_train_epochs=3,  # Increased epochs for better training
+        per_device_train_batch_size=4,  # Adjusted batch size for better performance
+        per_device_eval_batch_size=8,
+        warmup_steps=500,
+        weight_decay=0.01,
+        logging_dir='./logs',
+        evaluation_strategy="epoch",
+        save_strategy="epoch",
+        load_best_model_at_end=True,
+    )
 
-# Functie pentru calcularea metricei de evaluare
-def compute_metrics(pred):
-    labels = pred.label_ids
-    preds = pred.predictions.argmax(-1)
-    accuracy = accuracy_score(labels, preds)
-    precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary')
-    return {
-        'accuracy': accuracy,
-        'precision': precision,
-        'recall': recall,
-        'f1': f1
-    }
+    # Define evaluation metrics
+    def compute_metrics(pred):
+        labels = pred.label_ids
+        preds = pred.predictions.argmax(-1)
+        accuracy = accuracy_score(labels, preds)
+        precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary')
+        return {
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1': f1
+        }
 
-# Cream trainer-ul
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=train_dataset,
-    eval_dataset=val_dataset,
-    compute_metrics=compute_metrics  # Adaugam metrica de evaluare
-)
+    # Create the Trainer
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
+        compute_metrics=compute_metrics
+    )
 
-# Antrenam modelul
-trainer.train()
+    # Train the model
+    trainer.train()
 
-# Evaluam modelul si afisam metricele in consola
-evaluation_results = trainer.evaluate()
-print("Rezultatele evaluarii:", evaluation_results)
+    # Evaluate the model
+    evaluation_results = trainer.evaluate()
+    print("Evaluation Results:", evaluation_results)
 
-# Salvam modelul si tokenizer-ul
-model.save_pretrained('./saved_model')
-tokenizer.save_pretrained('./saved_model')
+    # Save the model and tokenizer
+    model.save_pretrained(model_dir)
+    tokenizer.save_pretrained(model_dir)
+
+# Prediction function
+def predict_news(news_text):
+    model_for_prediction = model.to('cpu')
+    inputs = tokenizer(clean_text(news_text), truncation=True, padding=True, max_length=128, return_tensors="pt")
+    inputs = {key: val.to('cpu') for key, val in inputs.items()}
+    
+    with torch.no_grad():
+        outputs = model_for_prediction(**inputs)
+    
+    prediction = torch.argmax(outputs.logits, dim=1).item()
+    return "True" if prediction == 1 else "False"
+
+# Example usage
+news_example = input("Enter the news article text for verification: ")
+result = predict_news(news_example)
+print(f"Prediction for the news article: {result}")
