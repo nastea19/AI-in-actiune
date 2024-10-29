@@ -25,7 +25,7 @@ news_dataset = pd.concat([true_news, fake_news], ignore_index=True)
 
 # Preprocess the dataset
 news_dataset = news_dataset[['text', 'label']]
-news_dataset = news_dataset.sample(frac=0.2, random_state=42)  # Use 20% of the dataset
+news_dataset = news_dataset.sample(frac=0.4, random_state=42)  # Use 40% of the dataset
 
 # Split the dataset
 train_texts, val_texts, train_labels, val_labels = train_test_split(
@@ -46,8 +46,8 @@ train_texts = [clean_text(text) for text in train_texts]
 val_texts = [clean_text(text) for text in val_texts]
 
 # Tokenize the texts
-train_encodings = tokenizer(train_texts, truncation=True, padding=True, max_length=128)
-val_encodings = tokenizer(val_texts, truncation=True, padding=True, max_length=128)
+train_encodings = tokenizer(train_texts, truncation=True, padding=True, max_length=256)
+val_encodings = tokenizer(val_texts, truncation=True, padding=True, max_length=256)
 
 # Create a custom dataset class
 class NewsDataset(torch.utils.data.Dataset):
@@ -126,7 +126,7 @@ else:
 # Prediction function
 def predict_news(news_text):
     model_for_prediction = model.to('cpu')
-    inputs = tokenizer(clean_text(news_text), truncation=True, padding=True, max_length=128, return_tensors="pt")
+    inputs = tokenizer(clean_text(news_text), truncation=True, padding=True, max_length=256, return_tensors="pt")
     inputs = {key: val.to('cpu') for key, val in inputs.items()}
     
     with torch.no_grad():
