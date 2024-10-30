@@ -29,9 +29,9 @@ for article in article_tags:
     link = article['href']
     full_link = 'https://stiri.md' + link if link.startswith('/') else link
     
-    # partea cu data publicarii
-    time_tag = article.find('time')
-    date = time_tag.get_text(strip=True) if time_tag else ''
+    # # partea cu data publicarii
+    # time_tag = article.find('time')
+    # date = time_tag.get_text(strip=True) if time_tag else ''
     
     # pentru vizualizari ca sa le extrag
     views = ''
@@ -50,6 +50,10 @@ for article in article_tags:
             if content_div:
              summary = content_div.get_text(strip=True)
 
+             # # partea cu data publicarii
+            time_tag = article_soup.find('time')
+            date = time_tag.get_text(strip=True) if time_tag else ''
+    
             print(f"Summary: {summary}")
             # extrag referintele
             references = []

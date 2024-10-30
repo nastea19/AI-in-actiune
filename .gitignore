@@ -2,4 +2,11 @@ tempCodeRunnerFile.py
 scrap.py
 scraping.py
 stiri.csv
+Coloana_SURSA.csv
+data_extrase.csv
+data_extrase2.csv
+Fake.csv
 stiri_vizualizari.csv
+results/checkpoint-*/optimizer.pt
+results/checkpoint-*
+results/
