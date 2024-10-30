@@ -1,33 +1,83 @@
 import requests
 from bs4 import BeautifulSoup
 import csv
-
-# # URL-ul paginii
 url = 'https://stiri.md/'
 response = requests.get(url)
-response.raise_for_status()  # Verifică dacă cererea a avut succes
-soup = BeautifulSoup(response.text, 'html.parser')  # Parsează conținutul paginii folosind BeautifulSoup
+response.raise_for_status()  # Check if the request was successful
+soup = BeautifulSoup(response.text, 'html.parser')  # Parse the page content using BeautifulSoup
 
-# # Găsește toate titlurile articolelor de știri (h2 cu clasele respective)
-titles = soup.find_all('h2', class_='mocked-styled-158 t181517i')
- # Creez o listă cu titlurile
-title_list = [title.get_text(strip=True) for title in titles]
+# Find all article links
+article_tags = soup.find_all('a', href=lambda href: href and '/article/' in href)
+articles_data = []
 
-# # Găsește toate elementele care conțin numărul de vizualizări
-views = soup.find_all('span', class_='mocked-styled-160')
-# # Creez o listă cu vizualizările
-view_list = [view.get_text(strip=True) for view in views]
+for article in article_tags:
+    # Get the title
+    title_tag = article.find('h2')
+    if not title_tag:
+        title_tag = article.find('h1')
+    title = title_tag.get_text(strip=True) if title_tag else ''
+    
+    # Get the link
+    link = article['href']
+    full_link = 'https://stiri.md' + link
+    
+    # Get the summary
+    summary_tag = article.find('p')
+    summary = summary_tag.get_text(strip=True) if summary_tag else ''
+    
+    # Get the date
+    time_tag = article.find('time')
+    date = time_tag.get_text(strip=True) if time_tag else ''
+    
+    # Get the views
+    views = ''
+    # Views are typically within a span tag next to an SVG icon
+    views_tag = article.find('span', class_=lambda x: x and ('clfmhif' in x or 'chx12dn' in x))
+    if views_tag:
+        views = views_tag.get_text(strip=True)
+    
+    # Append the data if the title is not empty to avoid duplicates or empty entries
+    if title:
+        articles_data.append({
+            'Titlu': title,
+            'Vizualizari': views,
+            'Data publicarii': date,
+            'Sursa': full_link,
+            'Rezumat': summary
+        })
 
-# # Verific dacă numărul de titluri corespunde cu numărul de vizualizări
-if len(title_list) == len(view_list):
-#     # Scrie titlurile și vizualizările într-un fișier CSV
-    with open('stiri_vizualizari.csv', mode='w', newline='', encoding='utf-8') as file:
-        writer = csv.writer(file)
-        writer.writerow(['Titlu', 'Vizualizari'])  # Scrie antetul
-        for title, view in zip(title_list, view_list):
-           writer.writerow([title, view])  # Scrie titlu și vizualizare pe fiecare rând
+# Remove duplicates by converting the list to a dictionary and back to a list
+unique_articles = {article['Sursa']: article for article in articles_data}.values()
 
-    print(f'S-au salvat {len(title_list)} articole și vizualizările lor în fișierul CSV.')
-else:
-     print('Numărul de titluri nu corespunde cu numărul de vizualizări. Verifică structura paginii.')
+# Now write to CSV
+with open('stiri_vizualizari.csv', mode='w', newline='', encoding='utf-8') as file:
+    fieldnames = ['Titlu', 'Vizualizari', 'Data publicarii', 'Sursa', 'Rezumat']
+    writer = csv.DictWriter(file, fieldnames=fieldnames)
+    writer.writeheader()
+    for data in unique_articles:
+        writer.writerow(data)
+
+print(f'S-au salvat {len(unique_articles)} articole, vizualizările și datele lor în fișierul CSV.')
+
+
+# if len(articles_data) > 0:
+#     articles_data = articles_data[1:]  # Exclude primul articol
+
+# # Eliminăm duplicatele convertind lista într-un dicționar și înapoi într-o listă
+# unique_articles = {article['Sursa']: article for article in articles_data}.values()
+
+# # Acum scriem în CSV
+# with open('stiri_vizualizari.csv', mode='w', newline='', encoding='utf-8') as file:
+#     fieldnames = ['Titlu', 'Vizualizari', 'Data publicarii', 'Sursa', 'Rezumat', 'Referinte']
+#     writer = csv.DictWriter(file, fieldnames=fieldnames)
+#     writer.writeheader()
+#     for data in unique_articles:
+#         writer.writerow(data)
+
+# print(f'S-au salvat {len(unique_articles)} articole, vizualizările și datele lor în fișierul CSV.')
+#Prima versiune de cod!!!!!!!
+
+
+
+
 
